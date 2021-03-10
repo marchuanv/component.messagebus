@@ -26,6 +26,10 @@ module.exports = function({ context, callbackContext }) {
         const error = "no callback context provided.";
         return new Error(error);
     }
+
+    this.context = context;
+    this.callbackContext = callbackContext;
+
     this.call = async ( { name, wildcard }, params) => {
         const contextLockName = callbackContext || "global";
         let contextLock = locks.find(x => x.context === contextLockName);
