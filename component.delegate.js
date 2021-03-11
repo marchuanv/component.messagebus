@@ -15,23 +15,11 @@ process.on('SIGUSR2', () => saveCallstack() );
 process.on('uncaughtException', () => saveCallstack() );
 
 const locks = [];
-const pointers = [];
-    
-module.exports = function({ context, callbackContext }) {
-    if (!context){
-        const error = "no context provided.";
-        return new Error(error);
-    }
-    if (!callbackContext){
-        const error = "no callback context provided.";
-        return new Error(error);
-    }
-
-    this.context = context;
-    this.callbackContext = callbackContext;
-
-    this.call = async ( { name, wildcard }, params) => {
-        const contextLockName = callbackContext || "global";
+module.exports = {
+    pointers: [],
+    call: async ( { context, name, wildcard }, params) => {
+        
+        const contextLockName = context || "global";
         let contextLock = locks.find(x => x.context === contextLockName);
         if (!contextLock) {
             contextLock = { isLocked: true, context: contextLockName };
@@ -41,15 +29,21 @@ module.exports = function({ context, callbackContext }) {
         } else {
             return new Promise((resolve)=> {
                 setTimeout(async () => {
-                    const results = await this.call( { name, wildcard }, params);
+                    const results = await module.exports.call( { context, name, wildcard }, params);
                     resolve(results);
                 }, 1000);
             });
         }
+
+        if (!context){
+            const error = "failed to invoke callback, no context provided.";
+            contextLock.isLocked = false
+            return new Error(error);
+        }
         
-        const pointer = pointers.find(p => p.context === callbackContext);
+        const pointer = module.exports.pointers.find(p => p.context === context);
         if (!pointer){
-            const error = `no pointers found for the ${callbackContext} module.`;
+            const error = `no pointers found for the ${context} module.`;
             contextLock.isLocked = false
             return new Error(error);
         }
@@ -58,7 +52,7 @@ module.exports = function({ context, callbackContext }) {
         if (!callbacks || !Array.isArray(callbacks)){
             const error = `expected pointer 'callbacks' to be an array`;
             contextLock.isLocked = false
-            return new Error(error);
+            return  new Error(error);
         }
 
         const filteredCallbacks = callbacks.filter(c => c.name.toString().startsWith(wildcard) || ( (wildcard === undefined || wildcard === "") && (c.name === name || !name )) );
@@ -70,7 +64,7 @@ module.exports = function({ context, callbackContext }) {
         
         for(const callback of filteredCallbacks){
             try {
-                const stackItem = { context: callbackContext, name: callback.name, retry: callback.retry, date: new Date() };
+                const stackItem = { context, name: callback.name, retry: callback.retry, date: new Date() };
                 stack.push(stackItem);
                 callback.result = await callback.func(params);
                 callback.timeout = 500;
@@ -80,7 +74,7 @@ module.exports = function({ context, callbackContext }) {
                 if (callback.retry <= 2){
                     callback.retry = callback.retry + 1;
                     setTimeout(async () => {
-                        await this.call( { context: callbackContext, name: callback.name, wildcard }, params);
+                        await module.exports.call( { context, name: callback.name, wildcard }, params);
                     }, callback.timeout);
                 }
                 callback.timeout = callback.timeout * 2;
@@ -106,16 +100,16 @@ module.exports = function({ context, callbackContext }) {
 
         if (filteredCallbacksCloned.filter(cb => cb.result).length > 1){
             contextLock.isLocked = false
-            return new Error(`expected at most one of all the functions registered for "${callbackContext}" to return results`);
+            return new Error(`expected at most one of all the functions registered for "${context}" to return results`);
         }
 
         contextLock.isLocked = false
 
         const firstCallbackWithResult = filteredCallbacksCloned.find(cb => cb.result);
         return  firstCallbackWithResult? firstCallbackWithResult.result : null;
-    };
-    this.register = async ({ name, overwriteDelegate = true }, callback) => {
-        const pointer = pointers.find(p => p.context === context);
+    },
+    register: async ({ context, name, overwriteDelegate = true }, callback) => {
+        const pointer = module.exports.pointers.find(p => p.context === context);
         if (pointer){
             if (overwriteDelegate){
                 const duplicateCallbackIndex = pointer.callbacks.findIndex(x => x.name === name);
@@ -125,10 +119,10 @@ module.exports = function({ context, callbackContext }) {
             }
             pointer.callbacks.push( { name, func: callback, retry: 1, timeout: 500, result: null });
         } else {
-            pointers.push({ 
+            module.exports.pointers.push({ 
                 context, 
                 callbacks: [{ name, func: callback, retry: 1, timeout: 500, result: null }]
             });
         }
-    };
+    }
 };
