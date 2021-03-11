@@ -101,7 +101,7 @@ module.exports = {
         module.exports["config"] = moduleInfo;
         if (parentModuleName) {
             module.exports[formatModuleName(parentModuleName)] = {
-                delegate = {
+                delegate: {
                     register: async ({ context, name, overwriteDelegate = true }, callback) => {
                         await delegate.register({ context, name, overwriteDelegate }, callback);
                     },
