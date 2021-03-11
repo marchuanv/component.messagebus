@@ -108,7 +108,7 @@ module.exports = {
                     call: async ( { context, name, wildcard }, params) => {
                         await delegate.call({ context: parentModuleName, name, wildcard }, params);
                     }
-                };
+                }
             };
         }
         await this.delegate.call( { name: "acquired" }, results );
