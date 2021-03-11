@@ -1,116 +1,128 @@
-const path = require("path");
-const fs = require('fs');
-const { exec } = require("child_process");
-const delegate = require("component.delegate");
+const fs = require("fs");
+const callstackFile = `${__dirname}/callstack.json`;
+let stack = [];
 
-const capitalize = (s) => {
-    if (typeof s !== 'string') return '';
-    return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-const formatModuleName = (moduleName) => {
-    let parts = moduleName.split(".");
-    let name = parts[0];
-    delete parts[0];
-    for(const part of parts){
-        name = name + capitalize(part);
-    };
-    return name;
+const saveCallstack = () => {
+    console.log('saving callstack.');
+    fs.writeFileSync(callstackFile,JSON.stringify(stack,null,4));
 };
 
-const installModule = ({ gitUsername, moduleName }) => {
-    return new Promise(async (resolve, reject) => {
-        let moduleToInstall = moduleName;
-        if (gitUsername) {
-            moduleToInstall = `${gitUsername}/${moduleName}`;
-        }
-        exec(`npm install ${moduleToInstall} --no-save`, () => {
-            const id = setInterval(() => {
-                let resolvedPath = path.join(__dirname,"node_modules", moduleName);
-                if (__dirname.indexOf("node_modules") > -1){
-                    resolvedPath = path.join(__dirname,"../");
-                    resolvedPath = path.join(resolvedPath, moduleName);
-                }
-                if (fs.existsSync(resolvedPath)){
-                    clearInterval(id);
-                    const packagePath = path.join(resolvedPath,"package.json");
-                    const package = require(packagePath);
-                    resolve({
-                        resolvedPath: path.join(resolvedPath,package.main),
-                        packagePath
-                    });
-                }
-            },100);
-        });
-    });
-};
+process.on('SIGTERM', () => saveCallstack() );
+process.on('exit', () => saveCallstack() );
+process.on('SIGINT', () => saveCallstack() );
+process.on('SIGUSR1', () => saveCallstack() );
+process.on('SIGUSR2', () => saveCallstack() );
+process.on('uncaughtException', () => saveCallstack() );
 
-const canResolveModule = (moduleName) => {
-    try {
-        return require.resolve(moduleName);
-    } catch(err) {
-        console.log(err);
-        return false;
-    }
-};
-
-const getModuleInfo = ({ moduleName, gitUsername }) => {
-    return new Promise(async (resolve) => {
-        let resolvedPath = canResolveModule(moduleName);
-        let packagePath = (resolvedPath || "" ).replace(`${moduleName}.js`,"package.json");
-        if (!resolvedPath){
-            ( { resolvedPath, packagePath } = await installModule({gitUsername,moduleName}));
-        }
-        const { name, hostname, port } = require(packagePath);
-        let info = {};
-        if (moduleName.startsWith("component")){
-            info["hostname"]           = hostname;
-            info["port"]               = port;
-            info["name"]               = name;
-            info["friendlyName"]       = formatModuleName(name);
-            info["modulePath"]         = resolvedPath;
-            if (!hostname || !port){
-                throw new Error(`failed to register ${moduleName}, package.json requires hostname and port configuration`);
-            }
-        }
-        await resolve(info);
-    });
-};
-
+const locks = [];
 module.exports = {
-    global: {
-        delegate: {
-            register: async ({ name, overwriteDelegate = true }, callback) => {
-                await delegate.register({ context: "component", name, overwriteDelegate }, callback);
-            },
-            call: async ( { name, wildcard }, params) => {
-                await delegate.call({ context: "component", name, wildcard }, params);
-            }
+    pointers: [],
+    call: async ( { context, name, wildcard }, params) => {
+        
+        const contextLockName = context || "global";
+        let contextLock = locks.find(x => x.context === contextLockName);
+        if (!contextLock) {
+            contextLock = { isLocked: true, context: contextLockName };
+            locks.push(contextLock);
+        } else if (!contextLock.isLocked) {
+            contextLock.isLocked = true;
+        } else {
+            return new Promise((resolve)=> {
+                setTimeout(async () => {
+                    const results = await module.exports.call( { context, name, wildcard }, params);
+                    resolve(results);
+                }, 1000);
+            });
         }
-    },
-    load: async ({ moduleName, gitUsername, parentModuleName }) => {
-        if (!gitUsername){
-            throw new Error("missing parameter: gitUsername");
+
+        if (!context){
+            const error = "failed to invoke callback, no context provided.";
+            contextLock.isLocked = false
+            return new Error(error);
         }
-        if (!moduleName){
-            throw new Error("missing parameter: moduleName");
+        
+        const pointer = module.exports.pointers.find(p => p.context === context);
+        if (!pointer){
+            const error = `no pointers found for the ${context} module.`;
+            contextLock.isLocked = false
+            return new Error(error);
         }
-        const moduleInfo = await getModuleInfo({ moduleName, gitUsername });
-        const instance = require(moduleInfo.modulePath);
-        module.exports[moduleInfo.friendlyName] = instance;
-        module.exports["config"] = moduleInfo;
-        if (parentModuleName) {
-            module.exports[formatModuleName(parentModuleName)] = {
-                delegate: {
-                    register: async ({ context, name, overwriteDelegate = true }, callback) => {
-                        await delegate.register({ context, name, overwriteDelegate }, callback);
-                    },
-                    call: async ( { context, name, wildcard }, params) => {
-                        await delegate.call({ context: parentModuleName, name, wildcard }, params);
-                    }
+
+        const callbacks =  pointer.callbacks;
+        if (!callbacks || !Array.isArray(callbacks)){
+            const error = `expected pointer 'callbacks' to be an array`;
+            contextLock.isLocked = false
+            return  new Error(error);
+        }
+
+        const filteredCallbacks = callbacks.filter(c => c.name.toString().startsWith(wildcard) || ( (wildcard === undefined || wildcard === "") && (c.name === name || !name )) );
+        if (filteredCallbacks.length === 0){
+            const error = `no callbacks`;
+            contextLock.isLocked = false
+            return new Error(error);
+        }
+        
+        for(const callback of filteredCallbacks){
+            try {
+                const stackItem = { context, name: callback.name, retry: callback.retry, date: new Date() };
+                stack.push(stackItem);
+                callback.result = await callback.func(params);
+                callback.timeout = 500;
+                callback.retry = 1;
+            } catch (error) {
+                callback.result = error;
+                if (callback.retry <= 2){
+                    callback.retry = callback.retry + 1;
+                    setTimeout(async () => {
+                        await module.exports.call( { context, name: callback.name, wildcard }, params);
+                    }, callback.timeout);
                 }
-            };
+                callback.timeout = callback.timeout * 2;
+            }
+        };
+
+        //Errors before promises resolved
+        for(const errorResult of filteredCallbacks.filter(cb => cb.result && cb.result.message && cb.result.stack)){
+            contextLock.isLocked = false
+            return errorResult.result;
+        };
+
+        await Promise.all(filteredCallbacks.map(c => c.result));
+        
+        const filteredCallbacksCloned = JSON.parse(JSON.stringify(filteredCallbacks));
+        filteredCallbacks.forEach(x => x.result = null );
+
+        //Errors after promises resolved
+        for(const errorResult of filteredCallbacksCloned.filter(cb => cb.result && cb.result.message && cb.result.stack)){
+            contextLock.isLocked = false
+            return errorResult.result;
+        };
+
+        if (filteredCallbacksCloned.filter(cb => cb.result).length > 1){
+            contextLock.isLocked = false
+            return new Error(`expected at most one of all the functions registered for "${context}" to return results`);
         }
-        await this.delegate.call( { name: "acquired" }, results );
+
+        contextLock.isLocked = false
+
+        const firstCallbackWithResult = filteredCallbacksCloned.find(cb => cb.result);
+        return  firstCallbackWithResult? firstCallbackWithResult.result : null;
+    },
+    register: async ({ context, name, overwriteDelegate = true }, callback) => {
+        const pointer = module.exports.pointers.find(p => p.context === context);
+        if (pointer){
+            if (overwriteDelegate){
+                const duplicateCallbackIndex = pointer.callbacks.findIndex(x => x.name === name);
+                if (duplicateCallbackIndex > -1){
+                    pointer.callbacks.splice(duplicateCallbackIndex,1);
+                }
+            }
+            pointer.callbacks.push( { name, func: callback, retry: 1, timeout: 500, result: null });
+        } else {
+            module.exports.pointers.push({ 
+                context, 
+                callbacks: [{ name, func: callback, retry: 1, timeout: 500, result: null }]
+            });
+        }
     }
 };
