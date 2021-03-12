@@ -55,7 +55,7 @@ module.exports = {
             return  new Error(error);
         }
 
-        const filteredCallbacks = callbacks.filter(c => c.name.toString().startsWith(wildcard) || ( (wildcard === undefined || wildcard === "") && (c.name === name || !name )) );
+        const filteredCallbacks = callbacks.filter(c => c.name.toString().startsWith(wildcard) || ( (wildcard === undefined || wildcard === null || wildcard === "") && (c.name === name || !name )) );
         if (filteredCallbacks.length === 0){
             const error = `no callbacks`;
             contextLock.isLocked = false
