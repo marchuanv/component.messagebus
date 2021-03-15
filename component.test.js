@@ -1,4 +1,4 @@
 module.exports = {
     module,
-    package: require("package.json")
+    package: require("./package.json")
 };
