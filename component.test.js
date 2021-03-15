@@ -1,3 +1,4 @@
 module.exports = {
-    currentModule: module
+    module,
+    package: require("package.json")
 };
