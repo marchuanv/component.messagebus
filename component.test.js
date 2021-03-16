@@ -1,4 +1,9 @@
+const fs = require("fs");
 module.exports = {
     module,
-    package: require("./package.json")
+    changeModuleParent: (parentName) => {
+        const package = require("./package.json");
+        package.parentName = parentName;
+        fs.writeFileSync(JSON.stringify(package));
+    }
 };
