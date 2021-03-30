@@ -109,6 +109,9 @@ module.exports = {
         return  firstCallbackWithResult? firstCallbackWithResult.result : null;
     },
     register: async ({ context, name, overwriteDelegate = true }, callback) => {
+        if (!name || !context || !callback){
+            throw new Error("missing parameters: context | name | callback");
+        }
         const pointer = module.exports.pointers.find(p => p.context === context);
         if (pointer){
             if (overwriteDelegate){
