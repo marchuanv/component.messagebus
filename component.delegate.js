@@ -9,13 +9,15 @@ const utils = require("utils");
 let currentControlId;
 
 const releaseControl = (controlId) => {
-    if (controlId === currentControlId) {
+    const controlIdEncodedPart = controlId.split("GUID:[")[0];
+    const currentControlIdEncodedPart = controlId.split("GUID:[")[0];
+    if (currentControlIdEncodedPart === controlIdEncodedPart) {
         currentControlId = null;
     }
 };
 
 const generateControlId = ({ context, name, wildcard }) => {
-    let controlId = context;
+    let controlId = `Encoded:[${context}]GUID:[${utils.generateGUI()}]`;
     if(name) {
         controlId = controlId + name;
     }
