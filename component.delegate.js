@@ -86,6 +86,9 @@ module.exports = {
         
         for(const callback of filteredCallbacks){
             try {
+                if (await callback.filterCallback(params)) {
+
+                }
                 callback.result = await callback.func(params);
                 callback.timeout = 500;
                 callback.retry = 1;
@@ -140,10 +143,11 @@ module.exports = {
         releaseControl(controlId);
         return response;
     },
-    register: async ({ context, name, overwriteDelegate = true }, callback) => {
-        if (!name || !context || !callback){
-            throw new Error("missing parameters: context | name | callback");
+    register: async ({ context, name, overwriteDelegate = true }, finalCallback, filterCallback) => {
+        if (!name || !context || !finalCallback){
+            throw new Error("missing parameters: context | name | finalCallback");
         }
+        filterCallback = filterCallback? filterCallback: () => true;
         const pointer = module.exports.pointers.find(p => p.context === context);
         if (pointer){
             if (overwriteDelegate){
@@ -152,11 +156,11 @@ module.exports = {
                     pointer.callbacks.splice(duplicateCallbackIndex,1);
                 }
             }
-            pointer.callbacks.push( { name, func: callback, retry: 1, timeout: 500, result: null });
+            pointer.callbacks.push( { name, finalCallback, filterCallback, retry: 1, timeout: 500, result: null });
         } else {
             module.exports.pointers.push({ 
                 context, 
-                callbacks: [{ name, func: callback, retry: 1, timeout: 500, result: null }]
+                callbacks: [{ name, finalCallback, filterCallback, retry: 1, timeout: 500, result: null }]
             });
         }
     }
