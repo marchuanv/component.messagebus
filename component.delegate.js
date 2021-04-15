@@ -15,7 +15,6 @@ const releaseControl = (controlId) => {
 
 module.exports = {
     pointers: [],
-    callstack: [],
     call: async ({ context, name, wildcard }, params) => {
         
         if (!context){
@@ -45,8 +44,6 @@ module.exports = {
         } else {
             currentControlId = newControlId;
         }
-
-        module.exports.callstack.unshift({ controlId: currentControlId, context: newControlId });
         
         const pointer = module.exports.pointers.find(p => p.context === context);
         if (!pointer){
@@ -89,7 +86,10 @@ module.exports = {
         //Errors before promises resolved
         for(const errorResult of filteredCallbacks.filter(cb => cb.result && cb.result.message && cb.result.stack)){
             releaseControl(newControlId);
-            return errorResult.result;
+            return  {
+                controlId : currentControlId,
+                results: errorResult.result
+            };
         };
 
         await Promise.all(filteredCallbacks.map(c => c.result));
@@ -100,17 +100,27 @@ module.exports = {
         //Errors after promises resolved
         for(const errorResult of filteredCallbacksCloned.filter(cb => cb.result && cb.result.message && cb.result.stack)){
             releaseControl(newControlId);
-            return errorResult.result;
+            return  {
+                controlId : currentControlId,
+                results: errorResult.result
+            };
         };
 
         if (filteredCallbacksCloned.filter(cb => cb.result).length > 1){
             releaseControl(newControlId);
-            return new Error(`expected at most one of all the functions registered for "${context}" to return results`);
+            return  {
+                controlId : currentControlId,
+                results: new Error(`expected at most one of all the functions registered for "${context}" to return results`)
+            };
         }
 
         const firstCallbackWithResult = filteredCallbacksCloned.find(cb => cb.result);
+        const response =  {
+            controlId : currentControlId,
+            results: firstCallbackWithResult? firstCallbackWithResult.result : null
+        };
         releaseControl(newControlId);
-        return  firstCallbackWithResult? firstCallbackWithResult.result : null;
+        return response;
     },
     register: async ({ context, name, overwriteDelegate = true }, callback) => {
         if (!name || !context || !callback){
