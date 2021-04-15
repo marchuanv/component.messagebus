@@ -87,7 +87,7 @@ module.exports = {
         for(const callback of filteredCallbacks){
             try {
                 if (await callback.filterCallback(params)) {
-                    callback.result = await callback.func(params);
+                    callback.result = await callback.finalCallback(params);
                     callback.timeout = 500;
                     callback.retry = 1;
                 } else {
