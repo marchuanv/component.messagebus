@@ -8,22 +8,35 @@ const utils = require("utils");
 
 let currentControlId;
 
+const decodeControlId = (controlId) => {
+    const Id = utils.base64ToString(controlId);
+    return {
+        context: Id.split("CONTEXT:")[1].split("GUID:")[0],
+        guid: Id.split("GUID:")[1]
+    };
+};
+
+const matchCurrentControlId = (controlId) => {
+    const currentControlIdDecoded = decodeControlId(currentControlId);
+    const controlIdDecoded = decodeControlId(controlId);
+    return currentControlIdDecoded.context === controlIdDecoded.context;
+};
+
 const releaseControl = (controlId) => {
-    const controlIdEncodedPart = controlId.split("GUID:[")[0];
-    const currentControlIdEncodedPart = controlId.split("GUID:[")[0];
-    if (currentControlIdEncodedPart === controlIdEncodedPart) {
+    if (matchCurrentControlId(controlId)) {
         currentControlId = null;
     }
 };
 
 const generateControlId = ({ context, name, wildcard }) => {
-    let controlId = `Encoded:[${context}]GUID:[${utils.generateGUI()}]`;
+    let controlId = context;
     if(name) {
-        controlId = controlId + name;
+        controlId = controlId + name.toString();
     }
     if(wildcard) {
-        controlId = controlId + wildcard;
+        controlId = controlId + wildcard.toString();
     }
+    controlId = `CONTEXT:[${controlId}]GUID:[${utils.generateGUID()}]`;
     return utils.stringToBase64(controlId);
 };
 
@@ -36,7 +49,7 @@ module.exports = {
         }
         let controlId = generateControlId({ context, name, wildcard });
         if (currentControlId) {
-            if (currentControlId === controlId) { //wait until control is released
+            if (matchCurrentControlId(controlId)) { //wait until control is released
                 return new Promise((resolve) => {
                     const intervalId = setInterval( async () => {
                         if (!currentControlId) {
