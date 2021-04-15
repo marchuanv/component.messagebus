@@ -1,12 +1,3 @@
-const fs = require("fs");
-const callstackFile = `${__dirname}/callstack.json`;
-let stack = [];
-
-const saveCallstack = () => {
-    console.log('saving callstack.');
-    fs.writeFileSync(callstackFile,JSON.stringify(stack,null,4));
-};
-
 process.on('SIGTERM', () => saveCallstack() );
 process.on('exit', () => saveCallstack() );
 process.on('SIGINT', () => saveCallstack() );
@@ -14,51 +5,67 @@ process.on('SIGUSR1', () => saveCallstack() );
 process.on('SIGUSR2', () => saveCallstack() );
 process.on('uncaughtException', () => saveCallstack() );
 
-const locks = [];
+let currentControlId;
+
+const releaseControl = (controlId) => {
+    if (controlId === currentControlId) {
+        currentControlId = null;
+    }
+};
+
 module.exports = {
     pointers: [],
-    call: async ( { context, name, wildcard }, params) => {
+    callstack: [],
+    call: async ({ context, name, wildcard }, params) => {
         
-        const contextLockName = context || "global";
-        let contextLock = locks.find(x => x.context === contextLockName);
-        if (!contextLock) {
-            contextLock = { isLocked: true, context: contextLockName };
-            locks.push(contextLock);
-        } else if (!contextLock.isLocked) {
-            contextLock.isLocked = true;
-        } else {
-            return new Promise((resolve)=> {
-                setTimeout(async () => {
-                    const results = await module.exports.call( { context, name, wildcard }, params);
-                    resolve(results);
-                }, 1000);
-            });
-        }
-
         if (!context){
             const error = "failed to invoke callback, no context provided.";
-            contextLock.isLocked = false
             return new Error(error);
         }
+
+        let newControlId = context;
+        if(name) {
+            newControlId = newControlId + name;
+        }
+        if(wildcard) {
+            newControlId = newControlId + wildcard;
+        }
+
+        if (currentControlId) {
+            if (currentControlId === newControlId) { //wait until control is released
+                return new Promise((resolve) => {
+                    const intervalId = setInterval( async () => {
+                        if (!currentControlId) {
+                            clearInterval(intervalId);
+                            await resolve(await module.exports.call({ context, name, wildcard }, params));
+                        }
+                    },1000);
+                });
+            }
+        } else {
+            currentControlId = newControlId;
+        }
+
+        module.exports.callstack.unshift({ controlId: currentControlId, context: newControlId });
         
         const pointer = module.exports.pointers.find(p => p.context === context);
         if (!pointer){
             const error = `no pointers found for the ${context} module.`;
-            contextLock.isLocked = false
+            releaseControl(newControlId);
             return new Error(error);
         }
 
         const callbacks =  pointer.callbacks;
         if (!callbacks || !Array.isArray(callbacks)){
             const error = `expected pointer 'callbacks' to be an array`;
-            contextLock.isLocked = false
+            releaseControl(newControlId);
             return  new Error(error);
         }
 
         const filteredCallbacks = callbacks.filter(c => c.name.toString().startsWith(wildcard) || ( (wildcard === undefined || wildcard === null || wildcard === "") && (c.name === name || !name )) );
         if (filteredCallbacks.length === 0){
             const error = `no callbacks`;
-            contextLock.isLocked = false
+            releaseControl(newControlId);
             return new Error(error);
         }
         
@@ -83,7 +90,7 @@ module.exports = {
 
         //Errors before promises resolved
         for(const errorResult of filteredCallbacks.filter(cb => cb.result && cb.result.message && cb.result.stack)){
-            contextLock.isLocked = false
+            releaseControl(newControlId);
             return errorResult.result;
         };
 
@@ -94,18 +101,17 @@ module.exports = {
 
         //Errors after promises resolved
         for(const errorResult of filteredCallbacksCloned.filter(cb => cb.result && cb.result.message && cb.result.stack)){
-            contextLock.isLocked = false
+            releaseControl(newControlId);
             return errorResult.result;
         };
 
         if (filteredCallbacksCloned.filter(cb => cb.result).length > 1){
-            contextLock.isLocked = false
+            releaseControl(newControlId);
             return new Error(`expected at most one of all the functions registered for "${context}" to return results`);
         }
 
-        contextLock.isLocked = false
-
         const firstCallbackWithResult = filteredCallbacksCloned.find(cb => cb.result);
+        releaseControl(newControlId);
         return  firstCallbackWithResult? firstCallbackWithResult.result : null;
     },
     register: async ({ context, name, overwriteDelegate = true }, callback) => {
