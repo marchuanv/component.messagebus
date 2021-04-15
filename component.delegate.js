@@ -71,8 +71,6 @@ module.exports = {
         
         for(const callback of filteredCallbacks){
             try {
-                const stackItem = { context, name: callback.name, retry: callback.retry, date: new Date() };
-                stack.push(stackItem);
                 callback.result = await callback.func(params);
                 callback.timeout = 500;
                 callback.retry = 1;
