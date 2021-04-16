@@ -40,6 +40,12 @@ const generateControlId = ({ context, name, wildcard }) => {
     return utils.stringToBase64(controlId);
 };
 
+const callstack = [];
+
+const addToCallstack = ({ Id, context }) => {
+    callstack.unshift({Id, context});
+};
+
 module.exports = {
     pointers: [],
     call: async ({ context, name, wildcard }, params) => {
@@ -67,6 +73,8 @@ module.exports = {
         } else {
             currentControlId = controlId;
         }
+
+        addToCallstack({Id : currentControlId, context })
         
         const pointer = module.exports.pointers.find(p => p.context === context);
         if (!pointer){
@@ -186,5 +194,18 @@ module.exports = {
                 callbacks: [{ name, finalCallback, filterCallback, retry: 1, timeout: 500, result: null }]
             });
         }
+    },
+    inCallstack: ({ context, success = true }) => {
+        return callstack.find(csi => csi.context === context && csi.success === success);
+    },
+    getCallstack: ({ context, latest = true }) => {
+        const clonedCallstack = utils.getJSONObject(utils.getJSONString(callstack));
+        const {Id} = clonedCallstack.find(csi => csi.context === context) || {}; //get the first element in the array
+        if (!latest) {
+            clonedCallstack.reverse();
+            ({ Id } = clonedCallstack.find(csi => csi.context === context) || {}); //get the first element in the array after reversing
+            clonedCallstack.reverse(); //restore the original order
+        }
+        return clonedCallstack.filter(csi => csi.Id === Id);
     }
 };
