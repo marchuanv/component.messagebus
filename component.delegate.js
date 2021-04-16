@@ -78,8 +78,15 @@ module.exports = {
                     reasons: subscription.reasons,
                     message: subscription.message
                 } = await subscription.callback(message));
-                if (subscription.success === undefined || subscription.reasons === undefined || subscription.message === undefined) {
-                    throw new Error(`one or more ${channel} subscribers did not respond with: { success: true | false, reasons: [], message: Object | String }`);
+                if (
+                    subscription.success === undefined || 
+                    subscription.reasons === undefined || 
+                    subscription.message === undefined ||
+                    (subscription.reasons && !Array.isArray(subscription.reasons)) ||
+                    (subscription.message && typeof subscription.message !== "string") ||
+                    (subscription.success && typeof subscription.success !== "string")
+                ) {
+                    throw new Error(`one or more ${channel} subscribers did not respond with: { success: true | false, reasons: [], message: String }`);
                 }
                 subscription.timeout = 500;
                 subscription.retry = 1;
