@@ -84,7 +84,7 @@ module.exports = {
                 subscription.timeout = 500;
                 subscription.retry = 1;
             } catch (error) {
-                subscription.reasons = subscription.reasons? subscription.reasons.push(error) : [error];
+                subscription.reasons = subscription.reasons? subscription.reasons.push({ error: error.message, stack: error.stack }) : [{ error: error.message, stack: error.stack }];
                 subscription.success = false;
                 if (subscription.retry <= 2){
                     subscription.retry = subscription.retry + 1;
