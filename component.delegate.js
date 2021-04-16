@@ -100,9 +100,14 @@ module.exports = {
         for(const callback of filteredCallbacks){
             try {
                 if (await callback.filterCallback(params)) {
-                    callback.result = await callback.finalCallback(params);
-                    callback.timeout = 500;
-                    callback.retry = 1;
+                    const { success, reasons, results } = await callback.finalCallback(params);
+                    if (success || reasons || results) {
+                        callback.result = { success, reasons, results };
+                        callback.timeout = 500;
+                        callback.retry = 1;
+                    } else {
+                        throw new Error(`the ${callback.name} callback did not respond with { success, reasons, results }`);
+                    }
                 } else {
                     callback.result = null;
                     callback.timeout = 500;
