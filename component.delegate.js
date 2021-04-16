@@ -83,8 +83,8 @@ module.exports = {
                     subscription.reasons === undefined || 
                     subscription.message === undefined ||
                     (subscription.reasons && !Array.isArray(subscription.reasons)) ||
-                    (subscription.message && typeof subscription.message !== "string") ||
-                    (subscription.success && typeof subscription.success !== "string")
+                    (subscription.message && typeof subscription.message !== "object") ||
+                    (subscription.success && typeof subscription.success !== "boolean")
                 ) {
                     throw new Error(`one or more ${channel} subscribers did not respond with: { success: true | false, reasons: [], message: String }`);
                 }
