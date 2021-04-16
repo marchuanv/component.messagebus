@@ -106,7 +106,7 @@ module.exports = {
                         callback.timeout = 500;
                         callback.retry = 1;
                     } else {
-                        throw new Error(`the ${callback.name} callback did not respond with { success, reasons, results }`);
+                        throw new Error(`one or more callbacks for the ${context} context did not respond with: { success, reasons, results }`);
                     }
                 } else {
                     callback.result = null;
