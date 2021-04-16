@@ -65,7 +65,7 @@ module.exports = {
 
         addToCallstack({Id : currentControlId, channel })
         
-        const subscriptions = subscribers.filter(subscriber => subscriber.channel === channel && await subscriber.validateCallback(data));
+        const subscriptions = subscribers.filter(async subscriber => subscriber.channel === channel && await subscriber.validateCallback(data));
         if (subscriptions.length === 0){
             releaseControl(currentControlId);
             throw new Error(`no ${channel} subscribers.`);
