@@ -141,6 +141,7 @@ module.exports = {
             releaseControl(currentControlId);
             return buildUnsuccessfulResponse(new Error(`expected at most one of all the functions registered for "${context}" to return results`));
         }
+        releaseControl(currentControlId);
         const firstCallbackWithResult = filteredCallbacksCloned.find(cb => cb.result);
         return buildSuccessfulResponse(firstCallbackWithResult.result);
     },
