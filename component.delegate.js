@@ -28,6 +28,14 @@ const releaseControl = (controlId) => {
     }
 };
 
+const buildSuccessfulResponse = (results) => {
+    return { success: true, reasons: null, results };
+};
+
+const buildUnsuccessfulResponse = (error) => {
+    return { success: false, reasons: new Error(error), results: null };
+};
+
 const generateControlId = ({ context, name, wildcard }) => {
     let controlId = context;
     if(name) {
@@ -50,13 +58,8 @@ module.exports = {
     pointers: [],
     call: async ({ context, name, wildcard }, params) => {
         if (!context){
-            const error = "failed to invoke callback, no context provided.";
-            const results =  {
-                controlId : currentControlId,
-                results: new Error(error)
-            };
-            releaseControl(controlId);
-            return results;
+            releaseControl(currentControlId);
+            return buildUnsuccessfulResponse("failed to invoke callback, no context provided.");
         }
         let controlId = generateControlId({ context, name, wildcard });
         if (currentControlId) {
@@ -78,35 +81,20 @@ module.exports = {
         
         const pointer = module.exports.pointers.find(p => p.context === context);
         if (!pointer){
-            const error = `no pointers found for the ${context} module.`;
-            const results =  {
-                controlId : currentControlId,
-                results: new Error(error)
-            };
-            releaseControl(controlId);
-            return results;
+            releaseControl(currentControlId);
+            return buildUnsuccessfulResponse(`no pointers found for the ${context} module.`);
         }
 
         const callbacks =  pointer.callbacks;
         if (!callbacks || !Array.isArray(callbacks)){
-            const error = `expected pointer 'callbacks' to be an array`;
-            const results =  {
-                controlId : currentControlId,
-                results: new Error(error)
-            };
-            releaseControl(controlId);
-            return results;
+            releaseControl(currentControlId);
+            return buildUnsuccessfulResponse(`expected pointer 'callbacks' to be an array`);
         }
 
         const filteredCallbacks = callbacks.filter(c => c.name.toString().startsWith(wildcard) || ( (wildcard === undefined || wildcard === null || wildcard === "") && (c.name === name || !name )) );
         if (filteredCallbacks.length === 0){
-            const error = `no callbacks`;
-            const results =  {
-                controlId : currentControlId,
-                results: new Error(error)
-            };
-            releaseControl(controlId);
-            return results;
+            releaseControl(currentControlId);
+            return buildUnsuccessfulResponse(`no callbacks for context: ${context}`);
         }
         
         for(const callback of filteredCallbacks){
@@ -134,12 +122,8 @@ module.exports = {
 
         //Errors before promises resolved
         for(const errorResult of filteredCallbacks.filter(cb => cb.result && cb.result.message && cb.result.stack)){
-            const results =  {
-                controlId : currentControlId,
-                results: errorResult.result
-            };
-            releaseControl(controlId);
-            return results;
+            releaseControl(currentControlId);
+            return buildUnsuccessfulResponse(errorResult.result);
         };
 
         await Promise.all(filteredCallbacks.map(c => c.result));
@@ -149,30 +133,15 @@ module.exports = {
 
         //Errors after promises resolved
         for(const errorResult of filteredCallbacksCloned.filter(cb => cb.result && cb.result.message && cb.result.stack)){
-            const results =  {
-                controlId : currentControlId,
-                results: errorResult.result
-            };
-            releaseControl(controlId);
-            return results;
+            releaseControl(currentControlId);
+            return buildUnsuccessfulResponse(errorResult.result);
         };
 
         if (filteredCallbacksCloned.filter(cb => cb.result).length > 1) {
-            const results =  {
-                controlId : currentControlId,
-                results: new Error(`expected at most one of all the functions registered for "${context}" to return results`)
-            };
-            releaseControl(controlId);
-            return results;
+            releaseControl(currentControlId);
+            return buildUnsuccessfulResponse(new Error(`expected at most one of all the functions registered for "${context}" to return results`));
         }
-
-        const firstCallbackWithResult = filteredCallbacksCloned.find(cb => cb.result);
-        const response =  {
-            controlId : currentControlId,
-            results: firstCallbackWithResult? firstCallbackWithResult.result : null
-        };
-        releaseControl(controlId);
-        return response;
+        return buildSuccessfulResponse(firstCallbackWithResult.result);
     },
     register: async ({ context, name, overwriteDelegate = true }, finalCallback, filterCallback) => {
         if (!name || !context || !finalCallback){
