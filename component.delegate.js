@@ -101,7 +101,7 @@ module.exports = {
             try {
                 if (await callback.filterCallback(params)) {
                     const { success, reasons, results } = await callback.finalCallback(params);
-                    if (success || reasons || results) {
+                    if (success && ( reasons || results )) {
                         callback.result = { success, reasons, results };
                         callback.timeout = 500;
                         callback.retry = 1;
