@@ -42,7 +42,7 @@ const callstack = [];
 const subscribers = [];
 
 module.exports = {
-    publish: async (channel, params) => {
+    publish: async ({ channel, data }) => {
         if (!channel){
             releaseControl(currentControlId);
             throw new Error("publish failed, no channel provided.");
@@ -54,7 +54,7 @@ module.exports = {
                     const intervalId = setInterval( async () => {
                         if (!currentControlId) {
                             clearInterval(intervalId);
-                            await resolve(await module.exports.publish(channel, params));
+                            await resolve(await module.exports.publish(channel, data));
                         }
                     },1000);
                 });
@@ -65,7 +65,7 @@ module.exports = {
 
         addToCallstack({Id : currentControlId, channel })
         
-        const subscriptions = subscribers.filter(subscriber => subscriber.channel === channel && await subscriber.validateCallback(params));
+        const subscriptions = subscribers.filter(subscriber => subscriber.channel === channel && await subscriber.validateCallback(data));
         if (subscriptions.length === 0){
             releaseControl(currentControlId);
             throw new Error(`no ${channel} subscribers.`);
@@ -77,7 +77,7 @@ module.exports = {
                     success: subscription.success,
                     reasons: subscription.reasons,
                     data: subscription.data
-                } = await subscription.callback(params));
+                } = await subscription.callback(data));
                 if (subscription.success === undefined || subscription.reasons === undefined || subscription.data === undefined) {
                     throw new Error(`one or more ${channel} subscribers did not respond with: { success: true | false, reasons: [], data: Object }`);
                 }
@@ -88,7 +88,7 @@ module.exports = {
                 if (subscription.retry <= 2){
                     subscription.retry = subscription.retry + 1;
                     setTimeout(async () => {
-                        await module.exports.publish(channel, params);
+                        await module.exports.publish(channel, data);
                     }, subscription.timeout);
                 }
                 subscription.timeout = subscription.timeout * 2;
