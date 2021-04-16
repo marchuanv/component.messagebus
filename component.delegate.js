@@ -195,10 +195,10 @@ module.exports = {
             });
         }
     },
-    inCallstack: ({ context, success = true }) => {
+    inCallstack: async ({ context, success = true }) => {
         return callstack.find(csi => csi.context === context && csi.success === success);
     },
-    getCallstack: ({ context, latest = true }) => {
+    getCallstack: async ({ context, latest = true }) => {
         const clonedCallstack = utils.getJSONObject(utils.getJSONString(callstack));
         const {Id} = clonedCallstack.find(csi => csi.context === context) || {}; //get the first element in the array
         if (!latest) {
