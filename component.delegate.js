@@ -29,7 +29,7 @@ const releaseControl = (controlId) => {
 };
 
 const buildSuccessfulResponse = (results) => {
-    return results;
+    return { success: true, reasons: null, results };
 };
 
 const buildUnsuccessfulResponse = (error) => {
