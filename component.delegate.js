@@ -11,7 +11,7 @@ let currentControlId;
 const decodeControlId = (controlId) => {
     const Id = utils.base64ToString(controlId);
     return {
-        context: Id.split("CONTEXT:")[1].split("GUID:")[0],
+        context: Id.split("CHANNEL:")[1].split("GUID:")[0],
         guid: Id.split("GUID:")[1]
     };
 };
