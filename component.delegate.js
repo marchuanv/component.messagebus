@@ -97,9 +97,12 @@ module.exports = {
 
         return subscriptions;
     },
-    subscribe: async ({ channel, callback, validateCallback = () => true, data }) => {
-        if (!channel || !finalCallback) {
-            throw new Error("missing parameters: channel OR finalCallback");
+    subscribe: async ({ channel, callback, validateCallback, data }) => {
+        if (!channel || !callback) {
+            throw new Error("missing parameters: channel OR callback");
+        }
+        if (!validateCallback) {
+            validateCallback = () => true;
         }
         subscribers.push({ 
             channel, 
