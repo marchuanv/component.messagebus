@@ -28,47 +28,33 @@ const releaseControl = (controlId) => {
     }
 };
 
-const buildSuccessfulResponse = (results) => {
-    return { success: true, reasons: null, results };
-};
-
-const buildUnsuccessfulResponse = (error) => {
-    return { success: false, reasons: new Error(error), results: null };
-};
-
-const generateControlId = ({ context, name, wildcard }) => {
-    let controlId = context;
-    if(name) {
-        controlId = controlId + name.toString();
-    }
-    if(wildcard) {
-        controlId = controlId + wildcard.toString();
-    }
-    controlId = `CONTEXT:[${controlId}]GUID:[${utils.generateGUID()}]`;
+const generateControlId = (channel) => {
+    const controlId = `CHANNEL:[${channel}]GUID:[${utils.generateGUID()}]`;
     return utils.stringToBase64(controlId);
 };
 
-const callstack = [];
 
-const addToCallstack = ({ Id, context }) => {
-    callstack.unshift({Id, context});
+const addToCallstack = ({ Id, channel }) => {
+    callstack.unshift({ Id, channel });
 };
 
+const callstack = [];
+const subscribers = [];
+
 module.exports = {
-    pointers: [],
-    call: async ({ context, name, wildcard }, params) => {
-        if (!context){
+    publish: async (channel, params) => {
+        if (!channel){
             releaseControl(currentControlId);
-            return buildUnsuccessfulResponse("failed to invoke callback, no context provided.");
+            throw new Error("publish failed, no channel provided.");
         }
-        let controlId = generateControlId({ context, name, wildcard });
+        let controlId = generateControlId(channel);
         if (currentControlId) {
             if (matchCurrentControlId(controlId)) { //wait until control is released
                 return new Promise((resolve) => {
                     const intervalId = setInterval( async () => {
                         if (!currentControlId) {
                             clearInterval(intervalId);
-                            await resolve(await module.exports.call({ context, name, wildcard }, params));
+                            await resolve(await module.exports.publish(channel, params));
                         }
                     },1000);
                 });
@@ -77,99 +63,55 @@ module.exports = {
             currentControlId = controlId;
         }
 
-        addToCallstack({Id : currentControlId, context })
+        addToCallstack({Id : currentControlId, channel })
         
-        const pointer = module.exports.pointers.find(p => p.context === context);
-        if (!pointer){
+        const subscriptions = subscribers.filter(subscriber => subscriber.channel === channel && await subscriber.validateCallback(params));
+        if (subscriptions.length === 0){
             releaseControl(currentControlId);
-            return buildUnsuccessfulResponse(`no pointers found for the ${context} module.`);
-        }
-
-        const callbacks =  pointer.callbacks;
-        if (!callbacks || !Array.isArray(callbacks)){
-            releaseControl(currentControlId);
-            return buildUnsuccessfulResponse(`expected pointer 'callbacks' to be an array`);
-        }
-
-        const filteredCallbacks = callbacks.filter(c => c.name.toString().startsWith(wildcard) || ( (wildcard === undefined || wildcard === null || wildcard === "") && (c.name === name || !name )) );
-        if (filteredCallbacks.length === 0){
-            releaseControl(currentControlId);
-            return buildUnsuccessfulResponse(`no callbacks for context: ${context}`);
+            throw new Error(`no ${channel} subscribers.`);
         }
         
-        for(const callback of filteredCallbacks){
+        for(const subscription of subscriptions){
             try {
-                if (await callback.filterCallback(params)) {
-                    const { success, reasons, results } = await callback.finalCallback(params);
-                    if (success && ( reasons || results )) {
-                        callback.result = { success, reasons, results };
-                        callback.timeout = 500;
-                        callback.retry = 1;
-                    } else {
-                        throw new Error(`one or more callbacks for the ${context} context did not respond with: { success, reasons, results }`);
-                    }
-                } else {
-                    callback.result = null;
-                    callback.timeout = 500;
-                    callback.retry = 1;
+                ({ 
+                    success: subscription.success,
+                    reasons: subscription.reasons,
+                    data: subscription.data
+                } = await subscription.callback(params));
+                if (subscription.success === undefined || subscription.reasons === undefined || subscription.data === undefined) {
+                    throw new Error(`one or more ${channel} subscribers did not respond with: { success: true | false, reasons: [], data: Object }`);
                 }
+                subscription.timeout = 500;
+                subscription.retry = 1;
             } catch (error) {
-                callback.result = error;
-                if (callback.retry <= 2){
-                    callback.retry = callback.retry + 1;
+                subscription.reasons = subscription.reasons? subscription.reasons.push(error) : [error];
+                if (subscription.retry <= 2){
+                    subscription.retry = subscription.retry + 1;
                     setTimeout(async () => {
-                        await module.exports.call( { context, name: callback.name, wildcard }, params);
-                    }, callback.timeout);
+                        await module.exports.publish(channel, params);
+                    }, subscription.timeout);
                 }
-                callback.timeout = callback.timeout * 2;
+                subscription.timeout = subscription.timeout * 2;
             }
         };
 
-        //Errors before promises resolved
-        for(const errorResult of filteredCallbacks.filter(cb => cb.result && cb.result.message && cb.result.stack)){
-            releaseControl(currentControlId);
-            return buildUnsuccessfulResponse(errorResult.result);
-        };
-
-        await Promise.all(filteredCallbacks.map(c => c.result));
-        
-        const filteredCallbacksCloned = JSON.parse(JSON.stringify(filteredCallbacks));
-        filteredCallbacks.forEach(x => x.result = null );
-
-        //Errors after promises resolved
-        for(const errorResult of filteredCallbacksCloned.filter(cb => cb.result && cb.result.message && cb.result.stack)){
-            releaseControl(currentControlId);
-            return buildUnsuccessfulResponse(errorResult.result);
-        };
-
-        if (filteredCallbacksCloned.filter(cb => cb.result).length > 1) {
-            releaseControl(currentControlId);
-            return buildUnsuccessfulResponse(new Error(`expected at most one of all the functions registered for "${context}" to return results`));
-        }
-        releaseControl(currentControlId);
-        const firstCallbackWithResult = filteredCallbacksCloned.find(cb => cb.result);
-        return buildSuccessfulResponse(firstCallbackWithResult.result);
+        return subscriptions;
     },
-    register: async ({ context, name, overwriteDelegate = true }, finalCallback, filterCallback) => {
-        if (!name || !context || !finalCallback){
-            throw new Error("missing parameters: context | name | finalCallback");
+    subscribe: async ({ channel, callback, validateCallback = () => true, data }) => {
+        if (!channel || !finalCallback) {
+            throw new Error("missing parameters: channel OR finalCallback");
         }
-        filterCallback = filterCallback? filterCallback: () => true;
-        const pointer = module.exports.pointers.find(p => p.context === context);
-        if (pointer){
-            if (overwriteDelegate){
-                const duplicateCallbackIndex = pointer.callbacks.findIndex(x => x.name === name);
-                if (duplicateCallbackIndex > -1){
-                    pointer.callbacks.splice(duplicateCallbackIndex,1);
-                }
+        subscribers.push({ 
+            channel, 
+            callback, 
+            validateCallback, 
+            success: false,
+            reasons: [],
+            data: {
+                input: data,
+                output: null
             }
-            pointer.callbacks.push( { name, finalCallback, filterCallback, retry: 1, timeout: 500, result: null });
-        } else {
-            module.exports.pointers.push({ 
-                context, 
-                callbacks: [{ name, finalCallback, filterCallback, retry: 1, timeout: 500, result: null }]
-            });
-        }
+        });
     },
     inCallstack: async ({ context, success = true }) => {
         return callstack.find(csi => csi.context === context && csi.success === success);
