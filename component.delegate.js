@@ -85,6 +85,7 @@ module.exports = {
                 subscription.retry = 1;
             } catch (error) {
                 subscription.reasons = subscription.reasons? subscription.reasons.push(error) : [error];
+                subscription.success = false;
                 if (subscription.retry <= 2){
                     subscription.retry = subscription.retry + 1;
                     setTimeout(async () => {
