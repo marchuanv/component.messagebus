@@ -1,8 +1,8 @@
 {
-  "name": "component.delegate",
+  "name": "component.messagebus",
   "version": "1.0.0",
   "description": "delegating function calls with retry policies",
-  "main": "component.delegate.js",
+  "main": "component.messagebus.js",
   "engines": {
     "node": "14.12.0",
     "npm": "6.14.8"
@@ -12,14 +12,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/marchuanv/component.delegate.git"
+    "url": "git+https://github.com/marchuanv/component.messagebus.git"
   },
   "author": "Marchuan Van Der Merwe",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/marchuanv/component.delegate/issues"
+    "url": "https://github.com/marchuanv/component.messagebus/issues"
   },
-  "homepage": "https://github.com/marchuanv/component.delegate#readme",
+  "homepage": "https://github.com/marchuanv/component.messagebus#readme",
   "dependencies": {
     "utils": "marchuanv/utils"
   },
