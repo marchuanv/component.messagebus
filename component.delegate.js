@@ -97,7 +97,7 @@ module.exports = {
 
         return subscriptions;
     },
-    subscribe: async ({ channel, callback, validateCallback, data }) => {
+    subscribe: async ({ channel, callback, validateCallback }) => {
         if (!channel || !callback) {
             throw new Error("missing parameters: channel OR callback");
         }
@@ -110,10 +110,7 @@ module.exports = {
             validateCallback, 
             success: false,
             reasons: [],
-            data: {
-                input: data,
-                output: null
-            }
+            data: null
         });
     },
     inCallstack: async ({ context, success = true }) => {
