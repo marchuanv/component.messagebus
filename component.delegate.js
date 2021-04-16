@@ -42,7 +42,7 @@ const callstack = [];
 const subscribers = [];
 
 module.exports = {
-    publish: async ({ channel, data }) => {
+    publish: async ({ channel, message }) => {
         if (!channel){
             releaseControl(currentControlId);
             throw new Error("publish failed, no channel provided.");
@@ -54,7 +54,7 @@ module.exports = {
                     const intervalId = setInterval( async () => {
                         if (!currentControlId) {
                             clearInterval(intervalId);
-                            await resolve(await module.exports.publish(channel, data));
+                            await resolve(await module.exports.publish(channel, message));
                         }
                     },1000);
                 });
@@ -65,7 +65,7 @@ module.exports = {
 
         addToCallstack({Id : currentControlId, channel })
         
-        const subscriptions = subscribers.filter(async subscriber => subscriber.channel === channel && await subscriber.validateCallback(data));
+        const subscriptions = subscribers.filter(async subscriber => subscriber.channel === channel && await subscriber.validateCallback(message));
         if (subscriptions.length === 0){
             releaseControl(currentControlId);
             throw new Error(`no ${channel} subscribers.`);
@@ -76,10 +76,10 @@ module.exports = {
                 ({ 
                     success: subscription.success,
                     reasons: subscription.reasons,
-                    data: subscription.data
-                } = await subscription.callback(data));
-                if (subscription.success === undefined || subscription.reasons === undefined || subscription.data === undefined) {
-                    throw new Error(`one or more ${channel} subscribers did not respond with: { success: true | false, reasons: [], data: Object }`);
+                    message: subscription.message
+                } = await subscription.callback(message));
+                if (subscription.success === undefined || subscription.reasons === undefined || subscription.message === undefined) {
+                    throw new Error(`one or more ${channel} subscribers did not respond with: { success: true | false, reasons: [], message: Object | String }`);
                 }
                 subscription.timeout = 500;
                 subscription.retry = 1;
@@ -88,7 +88,7 @@ module.exports = {
                 if (subscription.retry <= 2){
                     subscription.retry = subscription.retry + 1;
                     setTimeout(async () => {
-                        await module.exports.publish(channel, data);
+                        await module.exports.publish(channel, message);
                     }, subscription.timeout);
                 }
                 subscription.timeout = subscription.timeout * 2;
@@ -110,7 +110,7 @@ module.exports = {
             validateCallback, 
             success: false,
             reasons: [],
-            data: null
+            message: null
         });
     },
     inCallstack: async ({ context, success = true }) => {
