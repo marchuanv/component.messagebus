@@ -65,9 +65,9 @@ module.exports = {
 
         addToCallstack({Id : currentControlId, channel })
         
-        const subscriptions = subscribers.filter(async subscriber => subscriber.channel === channel && await subscriber.validateCallback(message));
+        const subscriptions = await Promise.all(subscribers.filter(subscriber => subscriber.channel === channel && subscriber.validateCallback(message)));
         if (subscriptions.length === 0){
-            releaseControl(currentControlId);
+            releaseControl(controlId);
             throw new Error(`no ${channel} subscribers.`);
         }
         
@@ -95,7 +95,7 @@ module.exports = {
                 subscription.timeout = subscription.timeout * 2;
             }
         };
-
+        releaseControl(controlId);
         return subscriptions;
     },
     subscribe: async ({ channel, callback, validateCallback }) => {
@@ -104,6 +104,10 @@ module.exports = {
         }
         if (!validateCallback) {
             validateCallback = () => true;
+        }
+        const subscriberIndex = subscribers.findIndex(s => s.channel === channel);
+        if (subscriberIndex > -1) {
+            subscribers.splice(subscriberIndex,1);
         }
         subscribers.push({ 
             channel, 
