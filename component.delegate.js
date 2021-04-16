@@ -75,14 +75,11 @@ module.exports = {
             try {
                 ({ 
                     success: subscription.success,
-                    reasons: subscription.reasons,
                     message: subscription.message
                 } = await subscription.callback(message));
                 if (
                     subscription.success === undefined || 
-                    subscription.reasons === undefined || 
                     subscription.message === undefined ||
-                    (subscription.reasons && !Array.isArray(subscription.reasons)) ||
                     (subscription.message && typeof subscription.message !== "object") ||
                     (subscription.success && typeof subscription.success !== "boolean")
                 ) {
@@ -91,8 +88,11 @@ module.exports = {
                 subscription.timeout = 500;
                 subscription.retry = 1;
             } catch (error) {
-                subscription.reasons = subscription.reasons? subscription.reasons.push({ error: error.message, stack: error.stack }) : [{ error: error.message, stack: error.stack }];
                 subscription.success = false;
+                subscription.message = {
+                    error: error.message,
+                    stack: error.stack
+                };
                 if (subscription.retry <= 2){
                     subscription.retry = subscription.retry + 1;
                     setTimeout(async () => {
