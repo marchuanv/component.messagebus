@@ -1,7 +1,7 @@
 {
   "name": "component.messagebus",
   "version": "1.0.0",
-  "description": "delegating function calls with retry policies",
+  "description": "publishing and subscribing to messages with retry policies",
   "main": "component.messagebus.js",
   "engines": {
     "node": "14.12.0",
