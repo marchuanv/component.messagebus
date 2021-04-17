@@ -23,5 +23,8 @@
   "dependencies": {
     "utils": "marchuanv/utils",
     "component.communication": "marchuanv/component.communication"
+  },
+  "component": {
+    "ishttp": true
   }
 }
