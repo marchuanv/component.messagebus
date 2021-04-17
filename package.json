@@ -21,7 +21,7 @@
   },
   "homepage": "https://github.com/marchuanv/component.messagebus#readme",
   "dependencies": {
-    "utils": "marchuanv/utils"
-  },
-  "component": {}
+    "utils": "marchuanv/utils",
+    "component.communication": "marchuanv/component.communication"
+  }
 }
