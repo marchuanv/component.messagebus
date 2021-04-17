@@ -1,2 +1,3 @@
 const { MessageBus } = require("./lib/messagebus.js");
-module.exports = { MessageBus };
+const { Message } = require("./message.js");
+module.exports = { MessageBus, Message };
