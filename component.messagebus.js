@@ -1,2 +1,2 @@
-const { MessageBusMessageSubscription, MessageBusMessage, MessageBus } = require("./lib/messagebus.js");
-module.exports = { MessageBusMessageSubscription, MessageBusMessage, MessageBus };
+const { MessageBusSubscription, MessageBusMessage, MessageBus } = require("./lib/messagebus.js");
+module.exports = { MessageBusSubscription, MessageBusMessage, MessageBus };
